@@ -16,6 +16,21 @@ struct CreditCard3DView: UIViewRepresentable {
   private let springStiffness: Float = 100
   private let springDamping: Float = 10
 
+  // Caches and constants
+  private enum Constants {
+    static let cardWidth: CGFloat = 5.4
+    static let cardHeight: CGFloat = 8.56
+    static let cardThickness: CGFloat = 0.08
+    static let cornerRadius: CGFloat = 0.3
+    static let logoBaseWidth: CGFloat = 1.2
+    static let logoBaseHeight: CGFloat = 0.8
+    static let chipBaseWidth: CGFloat = 0.8
+    static let chipBaseHeight: CGFloat = 1.0
+  }
+
+  private static let imageCache = NSCache<NSString, UIImage>()
+  private static let materialCache = NSCache<NSString, SCNMaterial>()
+
   func makeUIView(context: Context) -> SCNView {
     let sceneView = SCNView()
     sceneView.scene = createScene()
@@ -24,17 +39,27 @@ struct CreditCard3DView: UIViewRepresentable {
     sceneView.backgroundColor = UIColor.clear
     sceneView.antialiasingMode = .multisampling4X
 
+    // Preload common assets to avoid stalls when nodes are first created
+    preloadAssets()
+
     // Add gesture recognizer for rotation
     let panGesture = UIPanGestureRecognizer(
       target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
     sceneView.addGestureRecognizer(panGesture)
 
+    // Add tap gesture recognizer for flipping
+    let tapGesture = UITapGestureRecognizer(
+      target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+    tapGesture.require(toFail: panGesture)  // Only trigger tap if not panning
+    sceneView.addGestureRecognizer(tapGesture)
+
     return sceneView
   }
 
   func updateUIView(_ uiView: SCNView, context: Context) {
-    updateCardTexts(in: uiView.scene)
-    updateCardAppearance(in: uiView.scene)
+    // Always update when called - the @ObservedObject will trigger this only when properties change
+    updateCardTexts(in: uiView.scene, coordinator: context.coordinator)
+    updateCardAppearance(in: uiView.scene, coordinator: context.coordinator)
   }
 
   func createScene() -> SCNScene {
@@ -96,10 +121,10 @@ struct CreditCard3DView: UIViewRepresentable {
 
   func createCreditCard() -> SCNNode {
     // Portrait card dimensions (aspect ratio ~1.58:1)
-    let cardWidth: CGFloat = 5.4
-    let cardHeight: CGFloat = 8.56
-    let cardThickness: CGFloat = 0.08  // Extrusion depth - thin like a real card
-    let cornerRadius: CGFloat = 0.3
+    let cardWidth = Constants.cardWidth
+    let cardHeight = Constants.cardHeight
+    let cardThickness = Constants.cardThickness
+    let cornerRadius = Constants.cornerRadius
 
     // Create container node that will be rotated
     let containerNode = SCNNode()
@@ -107,12 +132,7 @@ struct CreditCard3DView: UIViewRepresentable {
     containerNode.eulerAngles.y = Float(rotationAngle)
 
     // Create rounded rectangle path in XY plane with smooth corners
-    let rect = CGRect(
-      x: -cardWidth / 2,
-      y: -cardHeight / 2,
-      width: cardWidth,
-      height: cardHeight
-    )
+    let rect = CGRect(x: -cardWidth / 2, y: -cardHeight / 2, width: cardWidth, height: cardHeight)
     let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
 
     // Flatten the path to make corners smoother with more segments
@@ -166,7 +186,7 @@ struct CreditCard3DView: UIViewRepresentable {
 
     // Add inquiry text on back (left side, rotated sideways)
     let inquiryNode = createInquiryText()
-    inquiryNode.position = SCNVector3(x: -2.5, y: 2.3, z: Float(-cardThickness / 2 - 0.01))
+      inquiryNode.position = SCNVector3(x: -2.4, y: 2.3, z: Float(-cardThickness / 2 - 0.01))
     containerNode.addChildNode(inquiryNode)
 
     // Add magnetic stripe bar on back (grey vertical bar)
@@ -177,7 +197,7 @@ struct CreditCard3DView: UIViewRepresentable {
 
     // Add website text on back (bottom center)
     let websiteNode = createWebsiteText()
-      websiteNode.position = SCNVector3(x: 0, y: -3.5, z: Float(-cardThickness / 2 - 0.01))
+      websiteNode.position = SCNVector3(x: 1, y: -3.9, z: Float(-cardThickness / 2 - 0.01))
     containerNode.addChildNode(websiteNode)
 
     return containerNode
@@ -208,14 +228,14 @@ struct CreditCard3DView: UIViewRepresentable {
     stripeGeometry.firstMaterial = stripeMaterial
 
     let stripeNode = SCNNode(geometry: stripeGeometry)
-    stripeNode.eulerAngles.y = .pi  // Rotate to face back
+    stripeNode.eulerAngles.y = .pi
 
     return stripeNode
   }
 
   func createWebsiteText() -> SCNNode {
     let websiteText = createTextNode(
-      text: CardConstants.websiteText, fontSize: 0.2, color: .white, alignment: .right)
+      text: CardConstants.websiteText, fontSize: 0.2, color: .white, alignment: .center)
     websiteText.eulerAngles.y = .pi
     return websiteText
   }
@@ -250,147 +270,111 @@ struct CreditCard3DView: UIViewRepresentable {
   }
 
   func createBankLogoNode() -> SCNNode {
-    let logoImageName = "boubyan_logo_white"
-
-    // Configure material for proper image display
-    let material = SCNMaterial()
-
-    // Create a plane for the logo with proper aspect ratio
-    var logoWidth: CGFloat = 1.2
-    var logoHeight: CGFloat = 0.8
-
-    // Apply logo image as texture and adjust dimensions to maintain aspect ratio
-    if let logoImage = UIImage(named: logoImageName) {
-      let imageAspectRatio = logoImage.size.width / logoImage.size.height
-
-      // Adjust dimensions to maintain aspect ratio
-      if imageAspectRatio > 1 {
-        // Wider than tall
-        logoHeight = logoWidth / imageAspectRatio
-      } else {
-        // Taller than wide
-        logoWidth = logoHeight * imageAspectRatio
-      }
-
-      material.diffuse.contents = logoImage
-      material.lightingModel = .physicallyBased  // Respond to scene lighting
-      material.isDoubleSided = true  // Make it visible from both sides
-      material.transparency = 1.0
-      material.writesToDepthBuffer = false  // Don't write to depth buffer
-      material.readsFromDepthBuffer = true
-      material.blendMode = .alpha  // Handle PNG transparency
-      material.transparencyMode = .default
-      material.metalness.contents = 0.0  // Non-metallic for clean look
-      material.roughness.contents = 0.3  // Slightly glossy for modern feel
-    } else {
-      // Fallback if image doesn't load
-      print("Warning: Could not load bank logo image: \(logoImageName)")
-      material.diffuse.contents = UIColor.red  // Use red for visibility if image fails
-    }
-
-    let logoGeometry = SCNPlane(width: logoWidth, height: logoHeight)
-    logoGeometry.firstMaterial = material
-
-    let logoNode = SCNNode(geometry: logoGeometry)
-    logoNode.renderingOrder = 100  // Render on top of other elements
-
-    return logoNode
+    return createImageNode(
+      named: "boubyan_logo_white", baseWidth: Constants.logoBaseWidth,
+      baseHeight: Constants.logoBaseHeight, metalness: 0.0)
   }
 
   func createNetworkLogoNode() -> SCNNode {
-    let logoImageName = cardDetails.cardNetwork.logoImageName
-
-    // Configure material for proper image display
-    let material = SCNMaterial()
-
-    // Create a plane for the logo with proper aspect ratio
-    var logoWidth: CGFloat = 1.2
-    var logoHeight: CGFloat = 0.8
-
-    // Apply logo image as texture and adjust dimensions to maintain aspect ratio
-    if let logoImage = UIImage(named: logoImageName) {
-      let imageAspectRatio = logoImage.size.width / logoImage.size.height
-
-      // Adjust dimensions to maintain aspect ratio
-      if imageAspectRatio > 1 {
-        // Wider than tall
-        logoHeight = logoWidth / imageAspectRatio
-      } else {
-        // Taller than wide
-        logoWidth = logoHeight * imageAspectRatio
-      }
-
-      material.diffuse.contents = logoImage
-      material.lightingModel = .physicallyBased  // Respond to scene lighting
-      material.isDoubleSided = true  // Make it visible from both sides
-      material.transparency = 1.0
-      material.writesToDepthBuffer = false  // Don't write to depth buffer
-      material.readsFromDepthBuffer = true
-      material.blendMode = .alpha  // Handle PNG transparency
-      material.transparencyMode = .default
-      material.metalness.contents = 0.0  // Non-metallic for clean look
-      material.roughness.contents = 0.3  // Slightly glossy for modern feel
-    } else {
-      // Fallback if image doesn't load
-      print("Warning: Could not load network logo image: \(logoImageName)")
-      material.diffuse.contents = UIColor.red  // Use red for visibility if image fails
-    }
-
-    let logoGeometry = SCNPlane(width: logoWidth, height: logoHeight)
-    logoGeometry.firstMaterial = material
-
-    let logoNode = SCNNode(geometry: logoGeometry)
-    logoNode.renderingOrder = 100  // Render on top of other elements
-
-    return logoNode
+    return createImageNode(
+      named: cardDetails.cardNetwork.logoImageName, baseWidth: Constants.logoBaseWidth,
+      baseHeight: Constants.logoBaseHeight, metalness: 0.0)
   }
 
   func createChipNode() -> SCNNode {
-    let chipImageName = "chip"
+    return createImageNode(
+      named: "chip", baseWidth: Constants.chipBaseWidth, baseHeight: Constants.chipBaseHeight,
+      metalness: 0.3, fallbackColor: UIColor.gray)
+  }
 
-    // Configure material for proper image display
-    let material = SCNMaterial()
+  // MARK: - Helpers for image nodes and materials (DRY)
 
-    // Create a plane for the chip with proper aspect ratio
-    var chipWidth: CGFloat = 0.8
-    var chipHeight: CGFloat = 1
-
-    // Apply chip image as texture and adjust dimensions to maintain aspect ratio
-    if let chipImage = UIImage(named: chipImageName) {
-      let imageAspectRatio = chipImage.size.width / chipImage.size.height
-
-      // Adjust dimensions to maintain aspect ratio
-      if imageAspectRatio > 1 {
-        // Wider than tall
-        chipHeight = chipWidth / imageAspectRatio
-      } else {
-        // Taller than wide
-        chipWidth = chipHeight * imageAspectRatio
-      }
-
-      material.diffuse.contents = chipImage
-      material.lightingModel = .physicallyBased  // Respond to scene lighting
-      material.isDoubleSided = true  // Make it visible from both sides
-      material.transparency = 1.0
-      material.writesToDepthBuffer = false  // Don't write to depth buffer
-      material.readsFromDepthBuffer = true
-      material.blendMode = .alpha  // Handle PNG transparency
-      material.transparencyMode = .default
-      material.metalness.contents = 0.3  // Slightly metallic for chip look
-      material.roughness.contents = 0.4  // Slightly glossy for metallic feel
+  private func makePBRMaterial(
+    image: UIImage?, metalness: CGFloat = 0.0, roughness: CGFloat = 0.3, isDoubleSided: Bool = true,
+    fallbackColor: UIColor = .red
+  ) -> SCNMaterial {
+    // Use a simple cache key based on image pointer or fallback
+    let key: String
+    if let img = image, let imgName = img.accessibilityIdentifier {
+      key = "mat:\(imgName):m:\(metalness)"
     } else {
-      // Fallback if image doesn't load
-      print("Warning: Could not load chip image: \(chipImageName)")
-      material.diffuse.contents = UIColor.gray  // Use gray for visibility if image fails
+      key = "mat:anon:m:\(metalness):fallback:\(fallbackColor.description)"
     }
 
-    let chipGeometry = SCNPlane(width: chipWidth, height: chipHeight)
-    chipGeometry.firstMaterial = material
+    if let cached = Self.materialCache.object(forKey: key as NSString) {
+      return cached
+    }
 
-    let chipNode = SCNNode(geometry: chipGeometry)
-    chipNode.renderingOrder = 100  // Render on top of other elements
+    let material = SCNMaterial()
+    material.diffuse.contents = image ?? fallbackColor
+    material.lightingModel = .physicallyBased
+    material.isDoubleSided = isDoubleSided
+    material.transparency = 1.0
+    material.writesToDepthBuffer = false
+    material.readsFromDepthBuffer = true
+    material.blendMode = .alpha
+    material.transparencyMode = .default
+    material.metalness.contents = metalness
+    material.roughness.contents = roughness
 
-    return chipNode
+    Self.materialCache.setObject(material, forKey: key as NSString)
+    return material
+  }
+
+  private func loadImage(named name: String) -> UIImage? {
+    let key = name as NSString
+    if let cached = Self.imageCache.object(forKey: key) {
+      return cached
+    }
+    let img = UIImage(named: name)
+    if let img = img {
+      // tag for material cache keying
+      img.accessibilityIdentifier = name
+      Self.imageCache.setObject(img, forKey: key)
+    }
+    return img
+  }
+
+  private func createImageNode(
+    named imageName: String, baseWidth: CGFloat = 1.0, baseHeight: CGFloat = 1.0,
+    metalness: CGFloat = 0.0, fallbackColor: UIColor = .red
+  ) -> SCNNode {
+    var width = baseWidth
+    var height = baseHeight
+
+    let image = loadImage(named: imageName)
+    if let img = image {
+      let aspect = img.size.width / img.size.height
+      if aspect > 1 {
+        height = width / aspect
+      } else {
+        width = height * aspect
+      }
+    }
+
+    let geom = SCNPlane(width: width, height: height)
+    let mat = makePBRMaterial(
+      image: image, metalness: metalness, roughness: 0.3, isDoubleSided: true,
+      fallbackColor: fallbackColor)
+    // store base sizes on the material (KVC) so we can read them later; SCNNode.userData is not available in some contexts
+    mat.setValue(baseWidth, forKey: "baseWidth")
+    mat.setValue(baseHeight, forKey: "baseHeight")
+    geom.firstMaterial = mat
+    let node = SCNNode(geometry: geom)
+    node.renderingOrder = 100
+    return node
+  }
+
+  private func preloadAssets() {
+    // Preload the common images used by the card so the first render doesn't stall
+    _ = loadImage(named: "boubyan_logo_white")
+    _ = loadImage(named: cardDetails.cardNetwork.logoImageName)
+    _ = loadImage(named: "chip")
+
+    // Cache current pattern image if available
+    if let patternImg = cardDetails.cardTemplate.pattern.toImage() {
+      Self.imageCache.setObject(patternImg, forKey: "__pattern__" as NSString)
+    }
   }
 
   func addCardTexts(to cardNode: SCNNode, cardThickness: Float) {
@@ -492,22 +476,22 @@ struct CreditCard3DView: UIViewRepresentable {
     let dx: Float
     switch alignment {
     case .left:
-      dx = min.x  // Pivot at left edge
+      dx = min.x  // Pivot at left edge (use min.x)
     case .center:
-      dx = (max.x - min.x) / 2  // Pivot at center
+      dx = (min.x + max.x) / 2  // Pivot at center (average of min and max)
     case .right:
-      dx = max.x  // Pivot at right edge
+      dx = max.x  // Pivot at right edge (use max.x)
     }
 
     // Vertical alignment
     let dy: Float
     switch verticalAlignment {
     case .top:
-      dy = min.y  // Pivot at top edge
+      dy = max.y  // Pivot at top edge (use max.y)
     case .center:
-      dy = (max.y - min.y) / 2  // Pivot at center
+      dy = (min.y + max.y) / 2  // Pivot at center (average of min and max)
     case .bottom:
-      dy = max.y  // Pivot at bottom edge
+      dy = min.y  // Pivot at bottom edge (use min.y)
     }
 
     textNode.pivot = SCNMatrix4MakeTranslation(dx, dy, 0)
@@ -515,10 +499,14 @@ struct CreditCard3DView: UIViewRepresentable {
     return textNode
   }
 
-  func updateCardTexts(in scene: SCNScene?) {
-    guard let cardNode = scene?.rootNode.childNode(withName: "creditCard", recursively: true) else {
-      return
+  func updateCardTexts(in scene: SCNScene?, coordinator: Coordinator) {
+    // Use cached node references to avoid expensive recursive traversals
+    if coordinator.cachedCardNode == nil {
+      coordinator.cachedCardNode = scene?.rootNode.childNode(
+        withName: "creditCard", recursively: true)
     }
+
+    guard let cardNode = coordinator.cachedCardNode else { return }
 
     // Update card number lines on back with extra spacing
     let cardNumberParts = cardDetails.cardNumber.split(separator: " ")
@@ -562,9 +550,14 @@ struct CreditCard3DView: UIViewRepresentable {
     }
   }
 
-  func updateCardAppearance(in scene: SCNScene?) {
-    guard let cardNode = scene?.rootNode.childNode(withName: "creditCard", recursively: true)
-    else { return }
+  func updateCardAppearance(in scene: SCNScene?, coordinator: Coordinator) {
+    // Use cached node reference
+    if coordinator.cachedCardNode == nil {
+      coordinator.cachedCardNode = scene?.rootNode.childNode(
+        withName: "creditCard", recursively: true)
+    }
+
+    guard let cardNode = coordinator.cachedCardNode else { return }
 
     // Update card materials with new pattern and color
     if let cardShape = cardNode.childNodes.first(where: { $0.geometry is SCNShape }),
@@ -589,14 +582,38 @@ struct CreditCard3DView: UIViewRepresentable {
       }
     }
 
-    // Update network logo when template changes (since different templates have different networks)
-    if let networkLogoNode = cardNode.childNode(withName: "networkLogo", recursively: true) {
-      let position = networkLogoNode.position
-      networkLogoNode.removeFromParentNode()
-      let newNetworkLogoNode = createNetworkLogoNode()
-      newNetworkLogoNode.name = "networkLogo"
-      newNetworkLogoNode.position = position
-      cardNode.addChildNode(newNetworkLogoNode)
+    // Update network logo when template changes (try to update material and preserve aspect)
+    if let networkLogoNode = cardNode.childNode(withName: "networkLogo", recursively: true),
+      let plane = networkLogoNode.geometry as? SCNPlane
+    {
+      let newImage = loadImage(named: cardDetails.cardNetwork.logoImageName)
+      if let mat = plane.firstMaterial {
+        mat.diffuse.contents = newImage ?? mat.diffuse.contents
+      } else {
+        plane.firstMaterial = makePBRMaterial(
+          image: newImage, metalness: 0.0, roughness: 0.3, isDoubleSided: true, fallbackColor: .red)
+      }
+
+      // Fix stretching: if we have base sizes stored on the material, recompute plane dimensions to respect aspect
+      if let mat = plane.firstMaterial,
+        let bw = mat.value(forKey: "baseWidth") as? CGFloat,
+        let bh = mat.value(forKey: "baseHeight") as? CGFloat
+      {
+        if let img = newImage {
+          let aspect = img.size.width / img.size.height
+          if aspect > 1 {
+            plane.width = bw
+            plane.height = bw / aspect
+          } else {
+            plane.height = bh
+            plane.width = bh * aspect
+          }
+        } else {
+          // no image: keep base sizes
+          plane.width = bw
+          plane.height = bh
+        }
+      }
     }
   }
 
@@ -606,23 +623,41 @@ struct CreditCard3DView: UIViewRepresentable {
 
   class Coordinator: NSObject {
     var parent: CreditCard3DView
-    var initialRotation: Float = 0
+    var initialRotationY: Float = 0
+    var initialRotationX: Float = 0
     var autoReturnTimer: Timer?
     var displayLink: CADisplayLink?
-    var targetRotation: Float = 0
-    var currentVelocity: Float = 0
+    var targetRotationY: Float = 0
+    var targetRotationX: Float = 0
+    var currentVelocityX: Float = 0
+    var currentVelocityY: Float = 0
+    var lastUpdateTime: CFTimeInterval = 0
+
+    // Cached node references to avoid recursive scene traversals
+    weak var cachedCardNode: SCNNode?
+
+    // Card flip state
+    private var isShowingBack = false
 
     // Haptic feedback
     private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
     private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
-    private var hapticTimer: Timer?
-    private let hapticInterval: TimeInterval = 0.05  // Trigger haptic every 50ms for continuous feel
+    private let softHaptic = UIImpactFeedbackGenerator(style: .soft)
     private var lastRotationForHaptic: Float = 0
     private var isRotating = false
+    private var lastHapticTime: CFTimeInterval = 0
 
-    // Friction properties
+    // Rotation-based haptic triggering
+    private let hapticRotationThreshold: Float = 0.08  // ~4.5 degrees between haptics
+    private let hapticMinInterval: CFTimeInterval = 0.04  // Minimum 40ms between haptics
+
+    // Friction properties - smoother engagement
     private var hasOvercomeFriction = false
-    private let frictionThreshold: Float = 20.0  // Pixels of movement needed to overcome friction
+    private let frictionThreshold: Float = 8.0  // Lower threshold for easier start
+
+    // Vertical tilt constraints
+    private let maxVerticalTilt: Float = 0.15  // ~8.6 degrees max vertical tilt
+    private let verticalDamping: Float = 0.4  // Reduce vertical movement sensitivity
 
     init(_ parent: CreditCard3DView) {
       self.parent = parent
@@ -630,27 +665,24 @@ struct CreditCard3DView: UIViewRepresentable {
       // Prepare haptic generators
       lightHaptic.prepare()
       mediumHaptic.prepare()
+      softHaptic.prepare()
     }
 
-    @objc private func continuousHaptic() {
-      lightHaptic.impactOccurred(intensity: 1)
-      lightHaptic.prepare()
+    deinit {
+      // Clean up timers to prevent leaks
+      autoReturnTimer?.invalidate()
+      displayLink?.invalidate()
     }
 
-    // Helper function to limit rotation to ~200 degrees (slightly more than 180)
-    // Returns the clamped value and stops at limits instead of wrapping
-    private func limitRotation(_ rotation: Float) -> Float {
-      let maxRotation: Float = Float.pi * 1.11  // ~200 degrees (slightly more than 180)
-      let minRotation: Float = -maxRotation
+    // Smooth easing function for friction
+    private func easeOutCubic(_ t: Float) -> Float {
+      let t1 = t - 1
+      return t1 * t1 * t1 + 1
+    }
 
-      // Clamp between -200 and +200 degrees
-      if rotation < minRotation {
-        return minRotation
-      } else if rotation > maxRotation {
-        return maxRotation
-      }
-
-      return rotation
+    // Apply vertical tilt constraints with smooth damping
+    private func applyVerticalConstraints(_ rotation: Float) -> Float {
+      return max(-maxVerticalTilt, min(maxVerticalTilt, rotation))
     }
 
     @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -660,7 +692,12 @@ struct CreditCard3DView: UIViewRepresentable {
 
       let translation = gesture.translation(in: view)
       let velocity = gesture.velocity(in: view)
-      var rotationSpeed: Float = 0.01
+
+      // More responsive rotation speed
+      let baseRotationSpeed: Float = 0.012
+
+      // Vertical rotation is less sensitive for subtle effect
+      let verticalRotationSpeed: Float = baseRotationSpeed * verticalDamping
 
       // Cancel any existing timers
       autoReturnTimer?.invalidate()
@@ -668,105 +705,131 @@ struct CreditCard3DView: UIViewRepresentable {
 
       switch gesture.state {
       case .began:
-        initialRotation = cardNode.eulerAngles.y
-        targetRotation = initialRotation
-        lastRotationForHaptic = initialRotation
+        initialRotationY = cardNode.eulerAngles.y
+        initialRotationX = cardNode.eulerAngles.x
+        targetRotationY = initialRotationY
+        targetRotationX = initialRotationX
+        lastRotationForHaptic = initialRotationY
+        lastHapticTime = CACurrentMediaTime()
         hasOvercomeFriction = false
         isRotating = false
+
+        // Soft haptic for touch down
+        softHaptic.impactOccurred(intensity: 0.8)
 
         // Prepare haptics for upcoming feedback
         lightHaptic.prepare()
         mediumHaptic.prepare()
 
       case .changed:
-        let absTranslation = abs(translation.x)
+        let currentTime = CACurrentMediaTime()
+        let absTranslationX = abs(translation.x)
+        let absTranslationY = abs(translation.y)
+        let totalTranslation = sqrt(
+          absTranslationX * absTranslationX + absTranslationY * absTranslationY)
 
-        // Apply friction at the start
+        // Smooth friction curve at the start
+        var rotationMultiplier: Float = 1.0
         if !hasOvercomeFriction {
-          if absTranslation < CGFloat(frictionThreshold) {
-            // Reduce rotation speed based on how far from threshold
-            let frictionFactor = Float(absTranslation) / frictionThreshold
-            rotationSpeed *= frictionFactor * 0.5  // 50% reduced speed during friction
+          if totalTranslation < CGFloat(frictionThreshold) {
+            // Smooth cubic easing for friction
+            let frictionFactor = Float(totalTranslation) / frictionThreshold
+            rotationMultiplier = easeOutCubic(frictionFactor) * 0.6 + 0.4  // Range from 0.4 to 1.0
           } else {
-            // Overcome friction with a medium haptic
+            // Overcome friction with a soft haptic
             hasOvercomeFriction = true
-            mediumHaptic.impactOccurred(intensity: 0.8)
+            softHaptic.impactOccurred(intensity: 0.9)
+            softHaptic.prepare()
           }
         }
 
-        targetRotation = initialRotation + Float(translation.x) * rotationSpeed
+        // Calculate horizontal rotation (no limits - full 360° freedom)
+        targetRotationY =
+          initialRotationY + Float(translation.x) * baseRotationSpeed * rotationMultiplier
 
-        // Limit rotation to 0-360 degrees (stop at edges, don't wrap)
-        targetRotation = limitRotation(targetRotation)
+        // Calculate vertical rotation (limited with damping for subtle effect)
+        let rawVerticalRotation =
+          initialRotationX - Float(translation.y) * verticalRotationSpeed * rotationMultiplier
+        targetRotationX = applyVerticalConstraints(rawVerticalRotation)
 
-        // Detect if actually rotating (movement threshold)
-        let rotationDelta = abs(targetRotation - lastRotationForHaptic)
-        let movementThreshold: Float = 0.01  // Small threshold to detect actual movement
+        // Trigger haptic based on rotation delta with time throttling
+        let rotationDelta = abs(targetRotationY - lastRotationForHaptic)
+        let timeSinceLastHaptic = currentTime - lastHapticTime
 
-        if rotationDelta > movementThreshold {
-          // Card is actively rotating
-          if !isRotating {
-            // Just started rotating - start haptic timer
-            isRotating = true
-            hapticTimer?.invalidate()
-            hapticTimer = Timer.scheduledTimer(
-              timeInterval: hapticInterval,
-              target: self,
-              selector: #selector(continuousHaptic),
-              userInfo: nil,
-              repeats: true
-            )
-          }
-          lastRotationForHaptic = targetRotation
-        } else {
-          // Card is held still - stop haptics
-          if isRotating {
-            isRotating = false
-            hapticTimer?.invalidate()
-            hapticTimer = nil
-          }
+        // Trigger haptic if enough rotation happened OR enough time passed while moving
+        let shouldTriggerHaptic =
+          (rotationDelta > hapticRotationThreshold
+            || (isRotating && timeSinceLastHaptic > hapticMinInterval * 2))
+          && timeSinceLastHaptic > hapticMinInterval
+
+        if shouldTriggerHaptic && hasOvercomeFriction {
+          // Vary haptic intensity based on rotation speed for better feedback
+          let velocityMagnitude = sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+          let intensity = min(1.0, max(0.4, Float(velocityMagnitude) / 1800.0))
+
+          mediumHaptic.impactOccurred(intensity: CGFloat(intensity))
+          mediumHaptic.prepare()
+          lastRotationForHaptic = targetRotationY
+          lastHapticTime = currentTime
+          isRotating = true
+        } else if rotationDelta > 0.001 {
+          // Mark as rotating even if haptic didn't fire
+          isRotating = true
         }
 
-        // Apply spring animation
+        // Apply smooth animation with very short duration for responsiveness
         SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.1
-        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeOut)
-        cardNode.eulerAngles.y = targetRotation
+        SCNTransaction.animationDuration = 0.08
+        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .linear)
+        cardNode.eulerAngles.y = targetRotationY
+        cardNode.eulerAngles.x = targetRotationX
         SCNTransaction.commit()
 
-        parent.rotationAngle = Double(targetRotation)
+        parent.rotationAngle = Double(targetRotationY)
 
       case .ended, .cancelled:
-        // Stop continuous haptic feedback
-        hapticTimer?.invalidate()
-        hapticTimer = nil
-
-        // Medium haptic when releasing only if was rotating
-        if isRotating || hasOvercomeFriction {
-          mediumHaptic.impactOccurred(intensity: 0.7)
-        }
+        // Reset rotation state
         isRotating = false
 
-        // Add momentum based on velocity
-        let momentumRotation = Float(velocity.x) * 0.0001
-        targetRotation = cardNode.eulerAngles.y + momentumRotation
-        currentVelocity = Float(velocity.x) * 0.001
+        // Soft haptic when releasing
+        if hasOvercomeFriction {
+          softHaptic.impactOccurred(intensity: 0.8)
+        }
 
-        // Limit rotation to 0-360 degrees (stop at edges, don't wrap)
-        targetRotation = limitRotation(targetRotation)
+        // Calculate momentum with improved physics
+        let velocityMagnitudeX = Float(velocity.x)
+        let velocityMagnitudeY = Float(velocity.y)
 
-        // Apply momentum with spring
+        // More natural momentum decay
+        let momentumMultiplier: Float = 0.00015
+        let momentumRotationY = velocityMagnitudeX * momentumMultiplier
+        let momentumRotationX = -velocityMagnitudeY * momentumMultiplier * verticalDamping
+
+        currentVelocityX = velocityMagnitudeX * 0.002
+        currentVelocityY = velocityMagnitudeY * 0.002
+
+        // Calculate final target positions
+        targetRotationY = cardNode.eulerAngles.y + momentumRotationY
+        targetRotationX = applyVerticalConstraints(cardNode.eulerAngles.x + momentumRotationX)
+
+        // Determine animation duration based on velocity (faster = longer decay)
+        let velocityMagnitude = sqrt(
+          currentVelocityX * currentVelocityX + currentVelocityY * currentVelocityY)
+        let momentumDuration = min(0.6, max(0.2, TimeInterval(velocityMagnitude / 5.0)))
+
+        // Apply momentum with smooth deceleration
         SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.3
+        SCNTransaction.animationDuration = momentumDuration
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(
-          controlPoints: 0.25, 0.46, 0.45, 0.94)
-        cardNode.eulerAngles.y = targetRotation
+          controlPoints: 0.22, 0.61, 0.36, 1.0)  // Smooth deceleration curve
+        cardNode.eulerAngles.y = targetRotationY
+        cardNode.eulerAngles.x = targetRotationX
         SCNTransaction.commit()
 
-        parent.rotationAngle = Double(targetRotation)
+        parent.rotationAngle = Double(targetRotationY)
 
-        // Start timer to return to center
-        autoReturnTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) {
+        // Start timer to return to center with longer delay
+        autoReturnTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) {
           [weak self] _ in
           self?.animateToCenter(cardNode: cardNode)
         }
@@ -776,13 +839,64 @@ struct CreditCard3DView: UIViewRepresentable {
     }
 
     func animateToCenter(cardNode: SCNNode) {
+      // Smooth return to center with gentle spring
+      // Preserve the flip state (front or back)
+      let targetY: Float = isShowingBack ? .pi : 0
+
       SCNTransaction.begin()
-      SCNTransaction.animationDuration = 0.3
-      SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-      cardNode.eulerAngles.y = 0
+      SCNTransaction.animationDuration = 0.6
+      SCNTransaction.animationTimingFunction = CAMediaTimingFunction(
+        controlPoints: 0.34, 1.56, 0.64, 1.0)  // Gentle spring effect
+      cardNode.eulerAngles.y = targetY
+      cardNode.eulerAngles.x = 0
       SCNTransaction.commit()
 
-      parent.rotationAngle = 0
+      parent.rotationAngle = Double(targetY)
+
+      // Soft haptic when settling to center
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        self?.softHaptic.impactOccurred(intensity: 0.7)
+      }
+    }
+
+    @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+      guard let view = gesture.view as? SCNView,
+        let cardNode = view.scene?.rootNode.childNode(withName: "creditCard", recursively: true)
+      else { return }
+
+      // Cancel auto-return timer since user is interacting
+      autoReturnTimer?.invalidate()
+
+      // Toggle flip state
+      isShowingBack.toggle()
+
+      // Medium haptic for flip action
+      mediumHaptic.impactOccurred(intensity: 0.8)
+      mediumHaptic.prepare()
+
+      // Calculate target rotation (flip to back is π radians / 180 degrees)
+      let targetY: Float = isShowingBack ? .pi : 0
+
+      // Smooth flip animation with spring effect
+      SCNTransaction.begin()
+      SCNTransaction.animationDuration = 0.5
+      SCNTransaction.animationTimingFunction = CAMediaTimingFunction(
+        controlPoints: 0.34, 1.35, 0.64, 1.0)  // Springy feel
+      cardNode.eulerAngles.y = targetY
+      cardNode.eulerAngles.x = 0  // Reset vertical tilt on flip
+      SCNTransaction.commit()
+
+      parent.rotationAngle = Double(targetY)
+
+      // Update internal rotation tracking
+      initialRotationY = targetY
+      targetRotationY = targetY
+      lastRotationForHaptic = targetY
+
+      // Subtle haptic at the end of the flip
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+        self?.softHaptic.impactOccurred(intensity: 0.6)
+      }
     }
   }
 }
