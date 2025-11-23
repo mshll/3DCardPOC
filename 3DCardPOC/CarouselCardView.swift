@@ -23,7 +23,7 @@ struct CarouselCardView: UIViewRepresentable {
     static let cardWidth: CGFloat = 5.4
     static let cardHeight: CGFloat = 8.56
     static let cardThickness: CGFloat = 0.08
-    static let cornerRadius: CGFloat = 0.3
+    static let cornerRadius: CGFloat = 0.6
     static let logoBaseWidth: CGFloat = 1.2
     static let logoBaseHeight: CGFloat = 0.8
     static let chipBaseWidth: CGFloat = 0.8
@@ -633,8 +633,6 @@ struct CarouselCardView: UIViewRepresentable {
 
     guard let cardNode = coordinator.cachedCardNode else { return }
 
-    // Performance optimization: Direct rotation update without transaction overhead
-    // This is much faster during scrolling
     cardNode.eulerAngles.y = Float(rotationAngle)
   }
 
