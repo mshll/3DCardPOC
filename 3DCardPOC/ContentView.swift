@@ -8,43 +8,42 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var cardDetails = CardDetailsModel()
-    @State private var showEditSheet = false
     @State private var cardRotation: Double = 0
     @State private var navigateToCarousel = false
+    @State private var selectedDesign: Int = 1
+    @State private var useAlphaTexture: Bool = true
+    @State private var backgroundColor: Color = .blue
 
     private let maxCardHeight: CGFloat = 500
-    private let templateButtonSize: CGFloat = 50
-    private let templateButtonSpacing: CGFloat = 20
-    private let sectionSpacing: CGFloat = 20
+
+    // Sample card data
+    private let cardData = Card3DData(
+        cardholderName: "Meshal Almutairi",
+        cardNumber: "4532 1234 5678 9010",
+        expiryDate: "12/28",
+        cvv: "123"
+    )
 
     var body: some View {
         NavigationView {
             VStack {
                 Spacer()
 
-                CreditCard3DView(cardDetails: cardDetails, rotationAngle: $cardRotation)
+                // New Card3DView with builder pattern
+                Card3DView(data: cardData)
+                    .cardStyle(currentStyle)
+                    .interaction(.freeRotation)
+                    .rotation($cardRotation)
                     .frame(maxHeight: maxCardHeight)
 
                 Spacer()
 
-                templateSelectorSection
+                styleControlsSection
 
                 carouselNavigationButton
             }
             .background(Color.white)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showEditSheet = true
-                    }) {
-                        Label("Edit", systemImage: "pencil.circle.fill")
-                            .foregroundColor(.white)
-                            .font(.title2)
-                    }
-                }
-            }
             .background(
                 NavigationLink(
                     destination: CardCarouselView(),
@@ -56,55 +55,93 @@ struct ContentView: View {
             )
         }
         .preferredColorScheme(.light)
-        .sheet(isPresented: $showEditSheet) {
-            EditCardView(cardDetails: cardDetails)
+    }
+
+    // MARK: - Current Style
+
+    private var currentStyle: Card3DStyle {
+        if useAlphaTexture {
+            return .alphaTextured(design: selectedDesign, backgroundColor: backgroundColor)
+        } else {
+            return .opaqueTextured(design: selectedDesign)
         }
     }
 
-    // MARK: - Template Selector Section
+    // MARK: - Style Controls Section
 
-    private var templateSelectorSection: some View {
-        VStack(spacing: sectionSpacing) {
-            Text("Select card type")
-                .font(.caption.bold())
-                .foregroundStyle(.black)
+    private var styleControlsSection: some View {
+        VStack(spacing: 20) {
+            // Design selector
+            VStack(spacing: 10) {
+                Text("Card Design")
+                    .font(.caption.bold())
+                    .foregroundStyle(.black)
 
-            HStack(spacing: templateButtonSpacing) {
-                ForEach(CardTemplate.allCases, id: \.self) { template in
-                    templateButton(for: template)
+                HStack(spacing: 15) {
+                    ForEach(1...5, id: \.self) { design in
+                        designButton(for: design)
+                    }
+                }
+            }
+
+            // Texture mode toggle
+            Toggle("Use Alpha Texture + Color", isOn: $useAlphaTexture)
+                .padding(.horizontal, 30)
+                .foregroundColor(.black)
+
+            // Color picker (only when alpha texture is enabled)
+            if useAlphaTexture {
+                HStack(spacing: 15) {
+                    Text("Background Color")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+
+                    ForEach([Color.blue, Color.purple, Color.green, Color.orange, Color.red], id: \.self) { color in
+                        colorButton(for: color)
+                    }
                 }
             }
         }
         .padding(.bottom, 30)
     }
 
-    private func templateButton(for template: CardTemplate) -> some View {
+    private func designButton(for design: Int) -> some View {
         Button(action: {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                cardDetails.cardTemplate = template
+                selectedDesign = design
             }
         }) {
-            VStack(spacing: 8) {
-                Circle()
-                    .fill(Color.clear)
-                    .frame(width: templateButtonSize, height: templateButtonSize)
-                    .overlay(
-                        Circle()
-                            .strokeBorder(
-                                Color.black,
-                                lineWidth: cardDetails.cardTemplate == template ? 2 : 0
-                            )
-                    )
-                    .overlay(
-                        templatePreviewColor(for: template)
-                            .clipShape(Circle())
-                            .padding(4)
-                    )
+            Circle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Text("\(design)")
+                        .font(.body.bold())
+                        .foregroundColor(selectedDesign == design ? .white : .black)
+                )
+                .background(
+                    Circle()
+                        .fill(selectedDesign == design ? Color.black : Color.clear)
+                )
+        }
+    }
 
-                Text(template.rawValue)
-                    .font(.caption)
-                    .foregroundColor(.black)
+    private func colorButton(for color: Color) -> some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                backgroundColor = color
             }
+        }) {
+            Circle()
+                .fill(color)
+                .frame(width: 30, height: 30)
+                .overlay(
+                    Circle()
+                        .strokeBorder(
+                            Color.black,
+                            lineWidth: backgroundColor == color ? 2 : 0
+                        )
+                )
         }
     }
 
@@ -125,23 +162,8 @@ struct ContentView: View {
         .padding(.horizontal, 30)
         .padding(.bottom, 20)
     }
-
-    // MARK: - Helper Methods
-
-    private func templatePreviewColor(for template: CardTemplate) -> Color {
-        switch template.pattern {
-        case .solid(let color):
-            return color
-        case .gradient(let colors, _):
-            return colors.first ?? .black
-        case .image(_):
-            return .gray
-        case .imageWithColor(_, let color):
-            return color
-        }
-    }
 }
 
 #Preview {
-  ContentView()
+    ContentView()
 }
