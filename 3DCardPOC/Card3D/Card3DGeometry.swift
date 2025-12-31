@@ -16,10 +16,10 @@ enum Card3DGeometry {
     // MARK: - Dimensions
 
     /// Card width in SceneKit units (portrait orientation)
-    static let width: CGFloat = 3.4
+    static let width: CGFloat = 5.0
 
     /// Card height in SceneKit units (portrait orientation)
-    static let height: CGFloat = 5.4
+    static let height: CGFloat = 8.0
 
     /// Card thickness (extrusion depth)
     static let thickness: CGFloat = 0.08

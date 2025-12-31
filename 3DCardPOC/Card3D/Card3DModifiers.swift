@@ -38,6 +38,15 @@ extension Card3DView {
         return copy
     }
 
+    /// Sets the scale of the 3D card in the scene.
+    /// - Parameter scale: The scale factor (1.0 = normal size, 0.5 = half size, etc.).
+    /// - Returns: A new Card3DView with the updated scale.
+    func cardScale(_ scale: CGFloat) -> Card3DView {
+        var copy = self
+        copy.cardScale = scale
+        return copy
+    }
+
     /// Binds the card's rotation to an external value.
     /// - Parameter binding: A binding to the rotation angle in radians.
     /// - Returns: A new Card3DView with the updated rotation binding.
@@ -47,6 +56,7 @@ extension Card3DView {
             style: style,
             textVisibility: textVisibility,
             interactionMode: interactionMode,
+            cardScale: cardScale,
             rotation: binding
         )
     }
@@ -65,6 +75,7 @@ extension Card3DView {
             style: .opaqueTextured(design: 1),
             textVisibility: Card3DTextVisibility(),
             interactionMode: .freeRotation,
+            cardScale: 1.0,
             rotation: .constant(0)
         )
     }

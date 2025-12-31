@@ -15,6 +15,16 @@ enum Card3DInteractionMode {
     case tapOnly
     case disabled
     case custom(Card3DInteractionHandler)
+
+    /// Simple type identifier for comparison (ignores associated values)
+    var modeType: Int {
+        switch self {
+        case .freeRotation: return 0
+        case .tapOnly: return 1
+        case .disabled: return 2
+        case .custom: return 3
+        }
+    }
 }
 
 // MARK: - Interaction Protocol
@@ -31,6 +41,7 @@ struct Card3DView: UIViewRepresentable {
     var style: Card3DStyle = .opaqueTextured(design: 1)
     var textVisibility: Card3DTextVisibility = .init()
     var interactionMode: Card3DInteractionMode = .freeRotation
+    var cardScale: CGFloat = 1.0
     @Binding var rotation: Double
 
     // MARK: - UIViewRepresentable
@@ -51,8 +62,10 @@ struct Card3DView: UIViewRepresentable {
             textVisibility: textVisibility
         )
 
-        // Apply initial rotation
+        // Apply initial rotation and scale
         cardNode.eulerAngles.y = Float(rotation)
+        let scale = Float(cardScale)
+        cardNode.scale = SCNVector3(scale, scale, scale)
 
         sceneView.scene = scene
 
@@ -69,13 +82,28 @@ struct Card3DView: UIViewRepresentable {
     func updateUIView(_ uiView: SCNView, context: Context) {
         let coordinator = context.coordinator
 
+        // Update parent reference so coordinator stays in sync
+        coordinator.parent = self
+
         // Check if we need to rebuild the scene (data, style, or visibility changed)
         let needsRebuild = coordinator.previousData != data ||
                           coordinator.previousStyle != style ||
                           coordinator.previousTextVisibility != textVisibility
 
+        // Check if interaction mode changed
+        let interactionModeChanged = coordinator.previousInteractionModeType != interactionMode.modeType
+
         if needsRebuild {
             rebuildScene(in: uiView, coordinator: coordinator)
+            coordinator.previousInteractionModeType = interactionMode.modeType
+        } else if interactionModeChanged {
+            // Just update interaction handler without rebuilding scene
+            coordinator.interactionHandler?.detach()
+            coordinator.interactionHandler = nil
+            if let cardNode = coordinator.cardNode {
+                attachInteractionHandler(to: uiView, cardNode: cardNode, coordinator: coordinator)
+            }
+            coordinator.previousInteractionModeType = interactionMode.modeType
         } else {
             // Just update rotation if changed externally
             guard let cardNode = coordinator.cardNode else { return }
@@ -100,8 +128,10 @@ struct Card3DView: UIViewRepresentable {
             textVisibility: textVisibility
         )
 
-        // Apply current rotation
+        // Apply current rotation and scale
         cardNode.eulerAngles.y = Float(rotation)
+        let scale = Float(cardScale)
+        cardNode.scale = SCNVector3(scale, scale, scale)
 
         // Update scene
         sceneView.scene = scene
@@ -156,6 +186,7 @@ struct Card3DView: UIViewRepresentable {
         var previousData: Card3DData
         var previousStyle: Card3DStyle
         var previousTextVisibility: Card3DTextVisibility
+        var previousInteractionModeType: Int
 
         // Flip state
         var isShowingBack = false
@@ -170,6 +201,7 @@ struct Card3DView: UIViewRepresentable {
             self.previousData = parent.data
             self.previousStyle = parent.style
             self.previousTextVisibility = parent.textVisibility
+            self.previousInteractionModeType = parent.interactionMode.modeType
             super.init()
             prepareHaptics()
         }

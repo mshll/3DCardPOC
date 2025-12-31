@@ -87,50 +87,41 @@ enum Card3DScene {
         // Back face is at negative Z (facing away from camera initially)
         let backZPosition = -cardThickness / 2 - 0.01
 
-        // Card number (split into 2 lines on back) - positioned near top for vertical card
+        // Card number (4 lines, one segment per line) - positioned near top for vertical card
         if visibility.cardNumber {
             let cardNumberParts = data.cardNumber.split(separator: " ")
-            let firstLine = cardNumberParts.prefix(2).joined(separator: "  ")
-            let secondLine = cardNumberParts.suffix(from: min(2, cardNumberParts.count)).joined(separator: "  ")
+            let lineSpacing: Float = 0.6
+            let startY: Float = 3.2
 
-            let cardNumberLine1Node = createTextNode(
-                text: firstLine,
-                fontSize: 0.35,
-                color: .white,
-                alignment: .left
-            )
-            cardNumberLine1Node.name = "cardNumberLine1"
-            cardNumberLine1Node.position = SCNVector3(x: 1.4, y: 2.0, z: backZPosition)
-            cardNumberLine1Node.eulerAngles.y = .pi
-            cardNode.addChildNode(cardNumberLine1Node)
-
-            let cardNumberLine2Node = createTextNode(
-                text: secondLine,
-                fontSize: 0.35,
-                color: .white,
-                alignment: .left
-            )
-            cardNumberLine2Node.name = "cardNumberLine2"
-            cardNumberLine2Node.position = SCNVector3(x: 1.4, y: 1.5, z: backZPosition)
-            cardNumberLine2Node.eulerAngles.y = .pi
-            cardNode.addChildNode(cardNumberLine2Node)
+            for (index, segment) in cardNumberParts.enumerated() {
+                let lineNode = createTextNode(
+                    text: String(segment),
+                    fontSize: 0.45,
+                    color: .white,
+                    alignment: .left
+                )
+                lineNode.name = "cardNumberLine\(index + 1)"
+                lineNode.position = SCNVector3(x: 2.1, y: startY - Float(index) * lineSpacing, z: backZPosition)
+                lineNode.eulerAngles.y = .pi
+                cardNode.addChildNode(lineNode)
+            }
         }
 
         // Cardholder name (on back, near bottom) - adjusted for vertical card
         if visibility.cardholderName {
             let nameNode = createTextNode(
                 text: data.cardholderName.uppercased(),
-                fontSize: 0.22,
+                fontSize: 0.28,
                 color: .white,
                 alignment: .left
             )
             nameNode.name = "cardholderName"
-            nameNode.position = SCNVector3(x: 1.4, y: -2.0, z: backZPosition)
+            nameNode.position = SCNVector3(x: 2.1, y: -3.2, z: backZPosition)
             nameNode.eulerAngles.y = .pi
             cardNode.addChildNode(nameNode)
         }
 
-        // Expiry and CVV (on back, middle area) - adjusted for vertical card
+        // Expiry and CVV (on back, below card number) - smaller and higher
         if visibility.expiryDate || visibility.cvv {
             let expiryCvcNode = createExpiryCvcNode(
                 expiryDate: data.expiryDate,
@@ -139,7 +130,7 @@ enum Card3DScene {
                 showCvv: visibility.cvv
             )
             expiryCvcNode.name = "expiryCvc"
-            expiryCvcNode.position = SCNVector3(x: 1.4, y: 0.5, z: backZPosition)
+            expiryCvcNode.position = SCNVector3(x: 2.1, y: 0.4, z: backZPosition)
             expiryCvcNode.eulerAngles.y = .pi
             cardNode.addChildNode(expiryCvcNode)
         }
@@ -160,7 +151,7 @@ enum Card3DScene {
             // EXP label
             let expLabel = createTextNode(
                 text: "EXP",
-                fontSize: 0.15,
+                fontSize: 0.10,
                 color: .white,
                 alignment: .left,
                 verticalAlignment: .center
@@ -171,23 +162,23 @@ enum Card3DScene {
             // Expiry value
             let expValue = createTextNode(
                 text: expiryDate,
-                fontSize: 0.3,
+                fontSize: 0.20,
                 color: .white,
                 alignment: .left,
                 verticalAlignment: .center
             )
             expValue.name = "expiryValue"
-            expValue.position = SCNVector3(x: xOffset + 0.5, y: 0, z: 0)
+            expValue.position = SCNVector3(x: xOffset + 0.35, y: 0, z: 0)
             containerNode.addChildNode(expValue)
 
-            xOffset += 1.7
+            xOffset += 1.2
         }
 
         if showCvv {
             // CVC label
             let cvcLabel = createTextNode(
                 text: "CVC",
-                fontSize: 0.15,
+                fontSize: 0.10,
                 color: .white,
                 alignment: .left,
                 verticalAlignment: .center
@@ -198,13 +189,13 @@ enum Card3DScene {
             // CVV value
             let cvcValue = createTextNode(
                 text: cvv,
-                fontSize: 0.3,
+                fontSize: 0.20,
                 color: .white,
                 alignment: .left,
                 verticalAlignment: .center
             )
             cvcValue.name = "cvvValue"
-            cvcValue.position = SCNVector3(x: xOffset + 0.5, y: 0, z: 0)
+            cvcValue.position = SCNVector3(x: xOffset + 0.35, y: 0, z: 0)
             containerNode.addChildNode(cvcValue)
         }
 

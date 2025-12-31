@@ -11,8 +11,17 @@ struct ContentView: View {
     @State private var cardRotation: Double = 0
     @State private var navigateToCarousel = false
     @State private var selectedDesign: Int = 1
-    @State private var useAlphaTexture: Bool = true
-    @State private var backgroundColor: Color = .blue
+    @State private var useAlphaTexture: Bool = false
+    @State private var backgroundColor: Color = Color(red: 0.10, green: 0.21, blue: 0.36)
+
+    // Modern credit card colors
+    private let cardColors: [Color] = [
+        Color(red: 0.10, green: 0.21, blue: 0.36),  // Navy
+        Color(red: 0.22, green: 0.25, blue: 0.32),  // Charcoal
+        Color(red: 0.83, green: 0.69, blue: 0.22),  // Gold
+        Color(red: 0.72, green: 0.43, blue: 0.47),  // Rose Gold
+        Color(red: 0.12, green: 0.16, blue: 0.22),  // Midnight
+    ]
 
     private let maxCardHeight: CGFloat = 500
 
@@ -91,12 +100,12 @@ struct ContentView: View {
 
             // Color picker (only when alpha texture is enabled)
             if useAlphaTexture {
-                HStack(spacing: 15) {
-                    Text("Background Color")
+                HStack(spacing: 12) {
+                    Text("Background")
                         .font(.caption)
                         .foregroundColor(.gray)
 
-                    ForEach([Color.blue, Color.purple, Color.green, Color.orange, Color.red], id: \.self) { color in
+                    ForEach(Array(cardColors.enumerated()), id: \.offset) { _, color in
                         colorButton(for: color)
                     }
                 }
