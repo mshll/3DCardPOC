@@ -91,17 +91,18 @@ enum Card3DScene {
         if visibility.cardNumber {
             let cardNumberParts = data.cardNumber.split(separator: " ")
             let lineSpacing: Float = 0.6
-            let startY: Float = 3.2
+            let startY: Float = 3.35
 
             for (index, segment) in cardNumberParts.enumerated() {
                 let lineNode = createTextNode(
                     text: String(segment),
                     fontSize: 0.45,
                     color: .white,
-                    alignment: .left
+                    alignment: .left,
+                    fontName: "Menlo-Bold"
                 )
                 lineNode.name = "cardNumberLine\(index + 1)"
-                lineNode.position = SCNVector3(x: 2.1, y: startY - Float(index) * lineSpacing, z: backZPosition)
+                lineNode.position = SCNVector3(x: 1.95, y: startY - Float(index) * lineSpacing, z: backZPosition)
                 lineNode.eulerAngles.y = .pi
                 cardNode.addChildNode(lineNode)
             }
@@ -121,7 +122,7 @@ enum Card3DScene {
             cardNode.addChildNode(nameNode)
         }
 
-        // Expiry and CVV (on back, below card number) - smaller and higher
+        // Expiry and CVV (on back, below card number) - no labels, just values
         if visibility.expiryDate || visibility.cvv {
             let expiryCvcNode = createExpiryCvcNode(
                 expiryDate: data.expiryDate,
@@ -130,13 +131,13 @@ enum Card3DScene {
                 showCvv: visibility.cvv
             )
             expiryCvcNode.name = "expiryCvc"
-            expiryCvcNode.position = SCNVector3(x: 2.1, y: 0.4, z: backZPosition)
+            expiryCvcNode.position = SCNVector3(x: 1.1, y: 0.85, z: backZPosition)
             expiryCvcNode.eulerAngles.y = .pi
             cardNode.addChildNode(expiryCvcNode)
         }
     }
 
-    /// Creates a compound node containing expiry and CVV labels and values.
+    /// Creates a compound node containing expiry and CVV values (no labels).
     private static func createExpiryCvcNode(
         expiryDate: String,
         cvv: String,
@@ -145,57 +146,33 @@ enum Card3DScene {
     ) -> SCNNode {
         let containerNode = SCNNode()
 
-        var xOffset: Float = 0
+        let lineSpacing: Float = 0.4
 
         if showExpiry {
-            // EXP label
-            let expLabel = createTextNode(
-                text: "EXP",
-                fontSize: 0.10,
-                color: .white,
-                alignment: .left,
-                verticalAlignment: .center
-            )
-            expLabel.position = SCNVector3(x: xOffset, y: 0, z: 0)
-            containerNode.addChildNode(expLabel)
-
-            // Expiry value
             let expValue = createTextNode(
                 text: expiryDate,
-                fontSize: 0.20,
+                fontSize: 0.28,
                 color: .white,
                 alignment: .left,
-                verticalAlignment: .center
+                verticalAlignment: .center,
+                fontName: "Menlo-Bold"
             )
             expValue.name = "expiryValue"
-            expValue.position = SCNVector3(x: xOffset + 0.35, y: 0, z: 0)
+            expValue.position = SCNVector3(x: 0, y: lineSpacing, z: 0)
             containerNode.addChildNode(expValue)
-
-            xOffset += 1.2
         }
 
         if showCvv {
-            // CVC label
-            let cvcLabel = createTextNode(
-                text: "CVC",
-                fontSize: 0.10,
-                color: .white,
-                alignment: .left,
-                verticalAlignment: .center
-            )
-            cvcLabel.position = SCNVector3(x: xOffset, y: 0, z: 0)
-            containerNode.addChildNode(cvcLabel)
-
-            // CVV value
             let cvcValue = createTextNode(
                 text: cvv,
-                fontSize: 0.20,
+                fontSize: 0.28,
                 color: .white,
                 alignment: .left,
-                verticalAlignment: .center
+                verticalAlignment: .center,
+                fontName: "Menlo-Bold"
             )
             cvcValue.name = "cvvValue"
-            cvcValue.position = SCNVector3(x: xOffset + 0.35, y: 0, z: 0)
+            cvcValue.position = SCNVector3(x: 0, y: 0, z: 0)
             containerNode.addChildNode(cvcValue)
         }
 
@@ -209,16 +186,22 @@ enum Card3DScene {
     ///   - color: Text color
     ///   - alignment: Horizontal alignment (affects pivot point)
     ///   - verticalAlignment: Vertical alignment (affects pivot point)
+    ///   - fontName: Optional custom font name (e.g., "Menlo-Bold" for monospace)
     /// - Returns: Configured SCNNode containing SCNText geometry
     static func createTextNode(
         text: String,
         fontSize: CGFloat,
         color: UIColor,
         alignment: TextAlignment = .center,
-        verticalAlignment: VerticalAlignment = .bottom
+        verticalAlignment: VerticalAlignment = .bottom,
+        fontName: String? = nil
     ) -> SCNNode {
         let textGeometry = SCNText(string: text, extrusionDepth: 0.01)
-        textGeometry.font = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+        if let fontName = fontName, let customFont = UIFont(name: fontName, size: fontSize) {
+            textGeometry.font = customFont
+        } else {
+            textGeometry.font = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+        }
         textGeometry.firstMaterial?.diffuse.contents = color
         textGeometry.firstMaterial?.specular.contents = UIColor.white
         textGeometry.firstMaterial?.shininess = 0.1
