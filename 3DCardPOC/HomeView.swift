@@ -13,24 +13,38 @@ struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
 
     var body: some View {
-        NavigationView {
-            ZStack(alignment: .top) {
-                // Background
-                Color(red: 0.96, green: 0.96, blue: 0.97)
-                    .ignoresSafeArea()
+        ZStack {
+            NavigationView {
+                ZStack(alignment: .top) {
+                    // Background
+                    Color(red: 0.96, green: 0.96, blue: 0.97)
+                        .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    // Header with gradient - ignores safe area
-                    headerSection
+                    VStack(spacing: 0) {
+                        // Header with gradient - ignores safe area
+                        headerSection
 
-                    // White card container - everything below header
-                    mainContentCard
+                        // White card container - everything below header
+                        mainContentCard
+                    }
                 }
+                .navigationBarHidden(true)
             }
-            .navigationBarHidden(true)
+            .navigationViewStyle(.stack)
+            .preferredColorScheme(.light)
+
+            if let expandedIndex = viewModel.expandedCardIndex,
+               expandedIndex < viewModel.cards.count {
+                ExpandedCardOverlay(
+                    card: viewModel.cards[expandedIndex],
+                    sourceFrame: viewModel.expandedSourceFrame,
+                    sourceRotation: viewModel.expandedSourceRotation,
+                    sourceScale: viewModel.expandedSourceScale,
+                    onReady: { viewModel.hideSourceCard() },
+                    onDismiss: { viewModel.collapseCard() }
+                )
+            }
         }
-        .navigationViewStyle(.stack)
-        .preferredColorScheme(.light)
     }
 
     // MARK: - Header Section
@@ -113,7 +127,9 @@ struct HomeView: View {
                 ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, card in
                     HomeCarouselCardView(
                         card: card,
-                        screenWidth: geometry.size.width
+                        index: index,
+                        screenWidth: geometry.size.width,
+                        viewModel: viewModel
                     )
                     .frame(width: cardWidth, height: 420)
                     .id(index)
@@ -249,7 +265,9 @@ private struct QuickActionButton: View {
 
 private struct HomeCarouselCardView: View {
     let card: CardDisplayInfo
+    let index: Int
     let screenWidth: CGFloat
+    @ObservedObject var viewModel: HomeViewModel
 
     private let maxYRotationDegrees: Double = 25.0
     private let maxXRotationDegrees: Double = 5.0
@@ -269,10 +287,19 @@ private struct HomeCarouselCardView: View {
 
             Card3DView(data: card.data)
                 .cardStyle(card.style)
-                .interaction(.tapOnly)
+                .interaction(.disabled)
                 .cardScale(scale)
                 .xRotation(xTilt)
                 .rotation(.constant(yTilt))
+                .opacity(viewModel.shouldHideSourceCard && viewModel.expandedCardIndex == index ? 0 : 1)
+                .onTapGesture {
+                    viewModel.expandCard(
+                        index: index,
+                        frame: geometry.frame(in: .global),
+                        rotation: yTilt,
+                        scale: scale
+                    )
+                }
         }
     }
 }
@@ -306,6 +333,13 @@ final class HomeViewModel: ObservableObject {
     }
     @Published private(set) var cards: [CardDisplayInfo] = []
 
+    // Expansion state
+    @Published var expandedCardIndex: Int? = nil
+    @Published var expandedSourceFrame: CGRect = .zero
+    @Published var expandedSourceRotation: Double = 0
+    @Published var expandedSourceScale: CGFloat = 1.0
+    @Published var shouldHideSourceCard: Bool = false
+
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     private let modernColors: [Color] = [
@@ -335,6 +369,22 @@ final class HomeViewModel: ObservableObject {
     init() {
         haptic.prepare()
         generateCards()
+    }
+
+    func expandCard(index: Int, frame: CGRect, rotation: Double, scale: CGFloat) {
+        expandedSourceFrame = frame
+        expandedSourceRotation = rotation
+        expandedSourceScale = scale
+        expandedCardIndex = index
+    }
+
+    func hideSourceCard() {
+        shouldHideSourceCard = true
+    }
+
+    func collapseCard() {
+        shouldHideSourceCard = false
+        expandedCardIndex = nil
     }
 
     private func generateCards() {

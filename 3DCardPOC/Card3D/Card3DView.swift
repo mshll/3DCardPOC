@@ -44,6 +44,7 @@ struct Card3DView: UIViewRepresentable {
     var cardScale: CGFloat = 1.0
     @Binding var rotation: Double
     var xRotation: Double = 0
+    var animationDuration: Double = 0.15
 
     // MARK: - UIViewRepresentable
 
@@ -119,7 +120,8 @@ struct Card3DView: UIViewRepresentable {
 
             if needsUpdate {
                 SCNTransaction.begin()
-                SCNTransaction.animationDuration = 0.15
+                SCNTransaction.animationDuration = animationDuration
+                SCNTransaction.animationTimingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1.0)
                 cardNode.eulerAngles.y = Float(rotation)
                 cardNode.eulerAngles.x = Float(xRotation)
                 let scale = Float(cardScale)

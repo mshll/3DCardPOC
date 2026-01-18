@@ -71,6 +71,15 @@ extension Card3DView {
         copy.xRotation = angle
         return copy
     }
+
+    /// Sets the animation duration for rotation and scale changes.
+    /// - Parameter duration: The animation duration in seconds.
+    /// - Returns: A new Card3DView with the updated animation duration.
+    func animationDuration(_ duration: Double) -> Card3DView {
+        var copy = self
+        copy.animationDuration = duration
+        return copy
+    }
 }
 
 // MARK: - Convenience Initializer
