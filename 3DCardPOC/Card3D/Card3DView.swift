@@ -43,6 +43,7 @@ struct Card3DView: UIViewRepresentable {
     var interactionMode: Card3DInteractionMode = .freeRotation
     var cardScale: CGFloat = 1.0
     @Binding var rotation: Double
+    var xRotation: Double = 0
 
     // MARK: - UIViewRepresentable
 
@@ -64,6 +65,7 @@ struct Card3DView: UIViewRepresentable {
 
         // Apply initial rotation and scale
         cardNode.eulerAngles.y = Float(rotation)
+        cardNode.eulerAngles.x = Float(xRotation)
         let scale = Float(cardScale)
         cardNode.scale = SCNVector3(scale, scale, scale)
 
@@ -107,11 +109,21 @@ struct Card3DView: UIViewRepresentable {
         } else {
             // Just update rotation if changed externally
             guard let cardNode = coordinator.cardNode else { return }
-            let currentRotation = Double(cardNode.eulerAngles.y)
-            if abs(currentRotation - rotation) > 0.01 {
+            let currentRotationY = Double(cardNode.eulerAngles.y)
+            let currentRotationX = Double(cardNode.eulerAngles.x)
+            let currentScale = Double(cardNode.scale.x)
+
+            let needsUpdate = abs(currentRotationY - rotation) > 0.001 ||
+                              abs(currentRotationX - xRotation) > 0.001 ||
+                              abs(currentScale - cardScale) > 0.001
+
+            if needsUpdate {
                 SCNTransaction.begin()
-                SCNTransaction.animationDuration = 0.1
+                SCNTransaction.animationDuration = 0.15
                 cardNode.eulerAngles.y = Float(rotation)
+                cardNode.eulerAngles.x = Float(xRotation)
+                let scale = Float(cardScale)
+                cardNode.scale = SCNVector3(scale, scale, scale)
                 SCNTransaction.commit()
             }
         }
@@ -130,6 +142,7 @@ struct Card3DView: UIViewRepresentable {
 
         // Apply current rotation and scale
         cardNode.eulerAngles.y = Float(rotation)
+        cardNode.eulerAngles.x = Float(xRotation)
         let scale = Float(cardScale)
         cardNode.scale = SCNVector3(scale, scale, scale)
 

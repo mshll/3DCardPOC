@@ -1,0 +1,407 @@
+//
+//  HomeView.swift
+//  3DCardPOC
+//
+
+import Combine
+import SwiftUI
+import UIKit
+
+// MARK: - Home View
+
+struct HomeView: View {
+    @StateObject private var viewModel = HomeViewModel()
+
+    var body: some View {
+        NavigationView {
+            ZStack(alignment: .top) {
+                // Background
+                Color(red: 0.96, green: 0.96, blue: 0.97)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Header with gradient - ignores safe area
+                    headerSection
+
+                    // White card container - everything below header
+                    mainContentCard
+                }
+            }
+            .navigationBarHidden(true)
+        }
+        .navigationViewStyle(.stack)
+        .preferredColorScheme(.light)
+    }
+
+    // MARK: - Header Section
+
+    private var headerSection: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.35, green: 0.08, blue: 0.14),
+                    Color(red: 0.25, green: 0.05, blue: 0.10)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            HStack(spacing: 4) {
+                Text("Here if you need")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.white)
+                Text("\u{1F44B}")
+                    .font(.subheadline)
+            }
+            .padding(.top, 25)
+        }
+        .frame(height: 140)
+        .ignoresSafeArea(edges: .top)
+    }
+
+    // MARK: - Main Content Card
+
+    private var mainContentCard: some View {
+        VStack(spacing: 0) {
+            // Card title and subtitle
+            VStack(spacing: 2) {
+                Text(viewModel.activeCard.cardName)
+                    .font(.footnote.bold())
+                    .foregroundColor(.black)
+
+                Text("\(viewModel.activeCard.cardType) \(viewModel.activeCard.maskedNumber)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            .padding(.top, 20)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.activeIndex)
+
+            // Card carousel
+            GeometryReader { geometry in
+                cardCarousel(geometry: geometry)
+            }
+            .frame(height: 400)
+
+            // Page indicator
+            pageIndicator
+                .padding(.top, 8)
+
+            Spacer()
+
+            // Balance section
+            balanceSection
+                .padding(.bottom, 20)
+
+            // Quick actions
+            quickActionsSection
+                .padding(.bottom, 24)
+
+            Spacer()
+            
+            // View 3D button
+            view3DButton
+                .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.96, green: 0.96, blue: 0.97))
+        .clipShape(
+            RoundedCorner(radius: 24, corners: [.topLeft, .topRight])
+        )
+        .offset(y: -50)
+    }
+
+    // MARK: - Card Carousel
+
+    private func cardCarousel(geometry: GeometryProxy) -> some View {
+        let cardWidth = geometry.size.width * 0.55
+        let cardSpacing: CGFloat = 12
+        let horizontalPadding = (geometry.size.width - cardWidth) / 2
+
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: cardSpacing) {
+                ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, card in
+                    HomeCarouselCardView(
+                        card: card,
+                        screenWidth: geometry.size.width
+                    )
+                    .frame(width: cardWidth, height: 420)
+                    .id(index)
+                }
+            }
+            .scrollTargetLayout()
+            .padding(.horizontal, horizontalPadding)
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $viewModel.scrollPosition)
+    }
+
+    // MARK: - Page Indicator
+
+    private var pageIndicator: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<viewModel.cards.count, id: \.self) { index in
+                if index == viewModel.activeIndex {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.black)
+                        .frame(width: 20, height: 8)
+                } else {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            Capsule()
+                .fill(Color.white)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.gray.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .animation(.easeInOut(duration: 0.2), value: viewModel.activeIndex)
+    }
+
+    // MARK: - Balance Section
+
+    private var balanceSection: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text("KD")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.black)
+                Text("4,526")
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundColor(.black)
+                Text(".050")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.black)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard.fill")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                Text("Available balance")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+
+    // MARK: - Quick Actions Section
+
+    private var quickActionsSection: some View {
+        HStack(spacing: 24) {
+            QuickActionButton(icon: "plus", label: "Pay")
+            QuickActionButton(icon: "moon.fill", label: "Sleep")
+            QuickActionButton(icon: "doc.text.fill", label: "Card details")
+            QuickActionButton(icon: "ellipsis", label: "More")
+        }
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: - View 3D Button
+
+    private var view3DButton: some View {
+        let buttonColor = Color(red: 0.17, green: 0.17, blue: 0.17) // #2B2B2B
+
+        return NavigationLink(destination: ContentView(selectedCard: viewModel.activeCard)) {
+            HStack(spacing: 8) {
+                Image(systemName: "cube.fill")
+                    .font(.subheadline.bold())
+                Text("View in 3D")
+                    .font(.subheadline.bold())
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(buttonColor)
+            .clipShape(Capsule())
+        }
+        .padding(.horizontal, 24)
+    }
+}
+
+// MARK: - Quick Action Button
+
+private struct QuickActionButton: View {
+    let icon: String
+    let label: String
+
+    private let buttonColor = Color(red: 0.17, green: 0.17, blue: 0.17) // #2B2B2B
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(buttonColor)
+                    .frame(width: 50, height: 50)
+
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+            }
+
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.gray)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Home Carousel Card View
+
+private struct HomeCarouselCardView: View {
+    let card: CardDisplayInfo
+    let screenWidth: CGFloat
+
+    private let maxYRotationDegrees: Double = 25.0
+    private let maxXRotationDegrees: Double = 5.0
+    private let minScale: CGFloat = 0.8
+
+    var body: some View {
+        GeometryReader { geometry in
+            let cardMidX = geometry.frame(in: .global).midX
+            let screenCenterX = screenWidth / 2
+            let offsetFromCenter = cardMidX - screenCenterX
+            let normalizedOffset = offsetFromCenter / (screenWidth / 2)
+            let absOffset = abs(normalizedOffset)
+
+            let yTilt = -normalizedOffset * maxYRotationDegrees * .pi / 180.0
+            let xTilt = -absOffset * maxXRotationDegrees * .pi / 180.0
+            let scale = 1.0 - (absOffset * (1.0 - minScale))
+
+            Card3DView(data: card.data)
+                .cardStyle(card.style)
+                .interaction(.tapOnly)
+                .cardScale(scale)
+                .xRotation(xTilt)
+                .rotation(.constant(yTilt))
+        }
+    }
+}
+
+// MARK: - Rounded Corner Shape
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
+// MARK: - Home View Model
+
+@MainActor
+final class HomeViewModel: ObservableObject {
+    @Published var scrollPosition: Int? = 0 {
+        didSet {
+            if scrollPosition != oldValue {
+                haptic.impactOccurred(intensity: 0.6)
+            }
+        }
+    }
+    @Published private(set) var cards: [CardDisplayInfo] = []
+
+    private let haptic = UIImpactFeedbackGenerator(style: .light)
+
+    private let modernColors: [Color] = [
+        Color(red: 0.10, green: 0.21, blue: 0.36),
+        Color(red: 0.22, green: 0.25, blue: 0.32),
+        Color(red: 0.83, green: 0.69, blue: 0.22),
+        Color(red: 0.72, green: 0.43, blue: 0.47),
+        Color(red: 0.12, green: 0.16, blue: 0.22),
+    ]
+
+    var activeIndex: Int {
+        scrollPosition ?? 0
+    }
+
+    var activeCard: CardDisplayInfo {
+        guard activeIndex < cards.count, !cards.isEmpty else {
+            return cards.first ?? CardDisplayInfo(
+                cardName: "Card",
+                cardType: "Card",
+                data: Card3DData(cardholderName: "", cardNumber: "", expiryDate: "", cvv: ""),
+                style: .opaqueTextured(design: 1)
+            )
+        }
+        return cards[activeIndex]
+    }
+
+    init() {
+        haptic.prepare()
+        generateCards()
+    }
+
+    private func generateCards() {
+        let cardSpecs: [(name: String, type: String, holderName: String)] = [
+            ("World Mastercard", "Credit Card", "Meshal Almutairi"),
+            ("Platinum Visa", "Credit Card", "Forsan Alsharabati"),
+            ("Gold Mastercard", "Debit Card", "Abdulaziz Karam"),
+            ("Prime Card", "Credit Card", "Abdullah Almukhaizeem"),
+            ("Business Elite", "Corporate Card", "Mohammed Ramadan"),
+            ("Rewards Plus", "Credit Card", "Khalid Alsaif"),
+            ("Travel Card", "Prepaid Card", "Omar Alharbi"),
+            ("Student Card", "Debit Card", "Yousef Aldosari"),
+            ("Family Card", "Credit Card", "Faisal Alqahtani"),
+            ("Digital Card", "Virtual Card", "Tariq Alsultan")
+        ]
+
+        cards = cardSpecs.enumerated().map { index, spec in
+            let data = Card3DData(
+                cardholderName: spec.holderName,
+                cardNumber: generateCardNumber(),
+                expiryDate: generateExpiryDate(),
+                cvv: String(format: "%03d", Int.random(in: 100...999))
+            )
+
+            let style: Card3DStyle
+            if index < 5 {
+                style = .opaqueTextured(design: index + 1)
+            } else {
+                style = .alphaTextured(design: index - 4, backgroundColor: modernColors[index - 5])
+            }
+
+            return CardDisplayInfo(
+                cardName: spec.name,
+                cardType: spec.type,
+                data: data,
+                style: style
+            )
+        }
+    }
+
+    private func generateCardNumber() -> String {
+        let prefixes = ["4532", "5412", "4916", "5234", "4024"]
+        let prefix = prefixes.randomElement() ?? "4532"
+        let segments = (0..<3).map { _ in
+            (0..<4).map { _ in String(Int.random(in: 0...9)) }.joined()
+        }
+        return "\(prefix) \(segments.joined(separator: " "))"
+    }
+
+    private func generateExpiryDate() -> String {
+        let month = Int.random(in: 1...12)
+        let year = Int.random(in: 25...30)
+        return String(format: "%02d/%02d", month, year)
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    HomeView()
+}

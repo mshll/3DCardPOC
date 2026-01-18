@@ -25,7 +25,7 @@ enum Card3DGeometry {
     static let thickness: CGFloat = 0.08
 
     /// Corner radius for rounded rectangle
-    static let cornerRadius: CGFloat = 0.3
+    static let cornerRadius: CGFloat = 0.7
 
     /// Chamfer radius for edge smoothing
     static let chamferRadius: CGFloat = 0.005

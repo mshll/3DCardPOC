@@ -51,7 +51,7 @@ extension Card3DView {
     /// - Parameter binding: A binding to the rotation angle in radians.
     /// - Returns: A new Card3DView with the updated rotation binding.
     func rotation(_ binding: Binding<Double>) -> Card3DView {
-        Card3DView(
+        var copy = Card3DView(
             data: data,
             style: style,
             textVisibility: textVisibility,
@@ -59,6 +59,17 @@ extension Card3DView {
             cardScale: cardScale,
             rotation: binding
         )
+        copy.xRotation = xRotation
+        return copy
+    }
+
+    /// Sets the card's X-axis rotation (tilt up/down).
+    /// - Parameter angle: The rotation angle in radians.
+    /// - Returns: A new Card3DView with the updated X rotation.
+    func xRotation(_ angle: Double) -> Card3DView {
+        var copy = self
+        copy.xRotation = angle
+        return copy
     }
 }
 

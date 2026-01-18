@@ -9,6 +9,22 @@ struct Card3DData: Equatable {
     let cvv: String             // "123"
 }
 
+// MARK: - Card Display Info
+
+struct CardDisplayInfo: Identifiable {
+    let id = UUID()
+    let cardName: String        // "World Mastercard"
+    let cardType: String        // "Credit Card"
+    let data: Card3DData
+    let style: Card3DStyle
+
+    var maskedNumber: String {
+        let parts = data.cardNumber.split(separator: " ")
+        guard parts.count == 4 else { return data.cardNumber }
+        return "****\(parts[3])"
+    }
+}
+
 // MARK: - Text Visibility
 
 struct Card3DTextVisibility: Equatable {
