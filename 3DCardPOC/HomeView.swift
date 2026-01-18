@@ -17,7 +17,7 @@ struct HomeView: View {
             NavigationView {
                 ZStack(alignment: .top) {
                     // Background
-                    Color(red: 0.96, green: 0.96, blue: 0.97)
+                    Color(red: 0.949, green: 0.949, blue: 0.949)
                         .ignoresSafeArea()
 
                     VStack(spacing: 0) {
@@ -108,7 +108,22 @@ struct HomeView: View {
                 .padding(.bottom, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.96, green: 0.96, blue: 0.97))
+        .background(
+            ZStack {
+                Color(red: 0.949, green: 0.949, blue: 0.949)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.71, green: 0.71, blue: 0.71), location: 0.08),
+                        .init(color: Color(red: 0.949, green: 0.949, blue: 0.949), location: 0.5)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .opacity(viewModel.isActiveCardSleeping ? 1 : 0)
+            }
+            .animation(.easeInOut(duration: 0.5), value: viewModel.isActiveCardSleeping)
+        )
         .clipShape(
             RoundedCorner(radius: 24, corners: [.topLeft, .topRight])
         )
@@ -203,11 +218,16 @@ struct HomeView: View {
     private var quickActionsSection: some View {
         HStack(spacing: 24) {
             QuickActionButton(icon: "plus", label: "Pay")
-            QuickActionButton(icon: "moon.fill", label: "Sleep")
+            QuickActionButton(
+                icon: viewModel.isActiveCardSleeping ? "moon.zzz.fill" : "moon.fill",
+                label: viewModel.isActiveCardSleeping ? "Wake" : "Sleep",
+                action: { viewModel.toggleActiveCardSleep() }
+            )
             QuickActionButton(icon: "doc.text.fill", label: "Card details")
             QuickActionButton(icon: "ellipsis", label: "More")
         }
         .padding(.horizontal, 24)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isActiveCardSleeping)
     }
 
     // MARK: - View 3D Button
@@ -237,27 +257,31 @@ struct HomeView: View {
 private struct QuickActionButton: View {
     let icon: String
     let label: String
+    var action: (() -> Void)? = nil
 
     private let buttonColor = Color(red: 0.17, green: 0.17, blue: 0.17) // #2B2B2B
 
     var body: some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .fill(buttonColor)
-                    .frame(width: 50, height: 50)
+        Button(action: { action?() }) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(buttonColor)
+                        .frame(width: 50, height: 50)
 
-                Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(.white)
+                    Image(systemName: icon)
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                }
+
+                Text(label)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
             }
-
-            Text(label)
-                .font(.caption2)
-                .foregroundColor(.gray)
-                .lineLimit(1)
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
     }
 }
 
@@ -272,6 +296,8 @@ private struct HomeCarouselCardView: View {
     private let maxYRotationDegrees: Double = 25.0
     private let maxXRotationDegrees: Double = 5.0
     private let minScale: CGFloat = 0.8
+    private let sleepTiltDegrees: Double = 45.0
+    private let sleepScaleMultiplier: CGFloat = 0.85
 
     var body: some View {
         GeometryReader { geometry in
@@ -282,8 +308,14 @@ private struct HomeCarouselCardView: View {
             let absOffset = abs(normalizedOffset)
 
             let yTilt = -normalizedOffset * maxYRotationDegrees * .pi / 180.0
-            let xTilt = -absOffset * maxXRotationDegrees * .pi / 180.0
-            let scale = 1.0 - (absOffset * (1.0 - minScale))
+            let baseTilt = -absOffset * maxXRotationDegrees * .pi / 180.0
+            let isSleeping = viewModel.isSleeping(cardId: card.id)
+            let isSleepAnimating = viewModel.isSleepAnimating(cardId: card.id)
+            let sleepTilt = sleepTiltDegrees * .pi / 180.0
+            let xTilt = baseTilt - (isSleeping ? sleepTilt : 0)
+            let baseScale = 1.0 - (absOffset * (1.0 - minScale))
+            let scale = isSleeping ? baseScale * sleepScaleMultiplier : baseScale
+            let animDuration = isSleepAnimating ? 1.2 : 0.15
 
             Card3DView(data: card.data)
                 .cardStyle(card.style)
@@ -291,15 +323,16 @@ private struct HomeCarouselCardView: View {
                 .cardScale(scale)
                 .xRotation(xTilt)
                 .rotation(.constant(yTilt))
-                .opacity(viewModel.shouldHideSourceCard && viewModel.expandedCardIndex == index ? 0 : 1)
-                .onTapGesture {
-                    viewModel.expandCard(
-                        index: index,
-                        frame: geometry.frame(in: .global),
-                        rotation: yTilt,
-                        scale: scale
-                    )
-                }
+                .animationDuration(animDuration)
+            .opacity(viewModel.shouldHideSourceCard && viewModel.expandedCardIndex == index ? 0 : 1)
+            .onTapGesture {
+                viewModel.expandCard(
+                    index: index,
+                    frame: geometry.frame(in: .global),
+                    rotation: yTilt,
+                    scale: scale
+                )
+            }
         }
     }
 }
@@ -340,7 +373,12 @@ final class HomeViewModel: ObservableObject {
     @Published var expandedSourceScale: CGFloat = 1.0
     @Published var shouldHideSourceCard: Bool = false
 
+    // Sleep state
+    @Published var sleepingCardIds: Set<UUID> = []
+    @Published var sleepAnimatingCardIds: Set<UUID> = []
+
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
 
     private let modernColors: [Color] = [
         Color(red: 0.10, green: 0.21, blue: 0.36),
@@ -366,8 +404,38 @@ final class HomeViewModel: ObservableObject {
         return cards[activeIndex]
     }
 
+    var isActiveCardSleeping: Bool {
+        sleepingCardIds.contains(activeCard.id)
+    }
+
+    func isSleeping(cardId: UUID) -> Bool {
+        sleepingCardIds.contains(cardId)
+    }
+
+    func isSleepAnimating(cardId: UUID) -> Bool {
+        sleepAnimatingCardIds.contains(cardId)
+    }
+
+    func toggleActiveCardSleep() {
+        let cardId = activeCard.id
+        mediumHaptic.impactOccurred()
+
+        sleepAnimatingCardIds.insert(cardId)
+
+        if sleepingCardIds.contains(cardId) {
+            sleepingCardIds.remove(cardId)
+        } else {
+            sleepingCardIds.insert(cardId)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
+            self?.sleepAnimatingCardIds.remove(cardId)
+        }
+    }
+
     init() {
         haptic.prepare()
+        mediumHaptic.prepare()
         generateCards()
     }
 
