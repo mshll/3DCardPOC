@@ -247,6 +247,14 @@ final class FreeRotationHandler: Card3DInteractionHandler {
     private let maxVerticalTilt: Float = 0.15
     private let verticalDamping: Float = 0.4
 
+    // Inertia properties
+    private var displayLink: CADisplayLink?
+    private var velocityY: Float = 0
+    private var velocityX: Float = 0
+    private let decelerationRate: Float = 0.95
+    private let minimumVelocity: Float = 0.001
+    private let velocityScale: Float = 0.00002
+
     func attach(to sceneView: SCNView, cardNode: SCNNode, coordinator: Card3DView.Coordinator) {
         self.sceneView = sceneView
         self.cardNode = cardNode
@@ -263,6 +271,7 @@ final class FreeRotationHandler: Card3DInteractionHandler {
     }
 
     func detach() {
+        stopInertia()
         if let pan = panGesture {
             sceneView?.removeGestureRecognizer(pan)
         }
@@ -270,6 +279,47 @@ final class FreeRotationHandler: Card3DInteractionHandler {
             sceneView?.removeGestureRecognizer(tap)
         }
     }
+
+    // MARK: - Inertia
+
+    private func startInertia() {
+        stopInertia()
+        let link = CADisplayLink(target: self, selector: #selector(updateInertia))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func stopInertia() {
+        displayLink?.invalidate()
+        displayLink = nil
+        velocityY = 0
+        velocityX = 0
+    }
+
+    @objc private func updateInertia() {
+        guard let cardNode = cardNode, let coordinator = coordinator else {
+            stopInertia()
+            return
+        }
+
+        // Apply velocity
+        cardNode.eulerAngles.y += velocityY
+        let newX = cardNode.eulerAngles.x + velocityX
+        cardNode.eulerAngles.x = max(-maxVerticalTilt, min(maxVerticalTilt, newX))
+
+        coordinator.updateRotation(Double(cardNode.eulerAngles.y))
+
+        // Apply deceleration
+        velocityY *= decelerationRate
+        velocityX *= decelerationRate
+
+        // Stop when velocity is negligible
+        if abs(velocityY) < minimumVelocity && abs(velocityX) < minimumVelocity {
+            stopInertia()
+        }
+    }
+
+    // MARK: - Gestures
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
         guard let cardNode = cardNode, let coordinator = coordinator else { return }
@@ -279,6 +329,7 @@ final class FreeRotationHandler: Card3DInteractionHandler {
 
         switch gesture.state {
         case .began:
+            stopInertia()
             initialRotationY = cardNode.eulerAngles.y
             initialRotationX = cardNode.eulerAngles.x
             coordinator.softHaptic.impactOccurred(intensity: 0.8)
@@ -297,6 +348,14 @@ final class FreeRotationHandler: Card3DInteractionHandler {
             coordinator.updateRotation(Double(newRotationY))
 
         case .ended, .cancelled:
+            let velocity = gesture.velocity(in: sceneView)
+            velocityY = Float(velocity.x) * velocityScale
+            velocityX = -Float(velocity.y) * velocityScale * verticalDamping
+
+            if abs(velocityY) > minimumVelocity || abs(velocityX) > minimumVelocity {
+                startInertia()
+            }
+
             coordinator.softHaptic.impactOccurred(intensity: 0.8)
 
         default:
@@ -307,6 +366,7 @@ final class FreeRotationHandler: Card3DInteractionHandler {
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         guard let cardNode = cardNode, let coordinator = coordinator else { return }
 
+        stopInertia()
         coordinator.isShowingBack.toggle()
         coordinator.mediumHaptic.impactOccurred(intensity: 0.8)
 

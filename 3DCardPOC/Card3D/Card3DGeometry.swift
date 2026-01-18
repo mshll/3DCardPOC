@@ -22,10 +22,10 @@ enum Card3DGeometry {
     static let height: CGFloat = 8.0
 
     /// Card thickness (extrusion depth)
-    static let thickness: CGFloat = 0.08
+    static let thickness: CGFloat = 0.056
 
     /// Corner radius for rounded rectangle
-    static let cornerRadius: CGFloat = 0.7
+    static let cornerRadius: CGFloat = 0.6
 
     /// Chamfer radius for edge smoothing
     static let chamferRadius: CGFloat = 0.005

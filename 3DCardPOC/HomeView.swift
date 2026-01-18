@@ -45,15 +45,6 @@ struct HomeView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-
-            HStack(spacing: 4) {
-                Text("Here if you need")
-                    .font(.subheadline.bold())
-                    .foregroundColor(.white)
-                Text("\u{1F44B}")
-                    .font(.subheadline)
-            }
-            .padding(.top, 25)
         }
         .frame(height: 140)
         .ignoresSafeArea(edges: .top)

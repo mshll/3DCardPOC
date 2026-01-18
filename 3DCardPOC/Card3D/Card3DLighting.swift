@@ -8,17 +8,8 @@
 import SceneKit
 
 /// Handles lighting and camera setup for 3D card scenes.
-/// Clean, minimal Apple-style lighting for product shots.
+/// 3-point lighting for depth and dimension.
 enum Card3DLighting {
-
-    // MARK: - Lighting Constants
-
-    private static let ambientIntensity: CGFloat = 200
-    private static let ambientColor = UIColor(white: 0.98, alpha: 1.0)
-
-    private static let directionalIntensity: CGFloat = 600
-    private static let directionalPosition = SCNVector3(0, 5, 10)
-    private static let directionalAngle: Float = -.pi / 6
 
     // MARK: - Camera Constants
 
@@ -27,31 +18,47 @@ enum Card3DLighting {
 
     // MARK: - Setup Functions
 
-    /// Configures lighting for the 3D card scene.
+    /// Configures 3-point lighting for the 3D card scene.
     /// - Parameter scene: The SceneKit scene to add lights to.
     static func setup(in scene: SCNScene) {
-        // Ambient light - soft fill
+        // Ambient - soft base fill
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
-        ambientLight.intensity = ambientIntensity
-        ambientLight.color = ambientColor
-
+        ambientLight.intensity = 100
+        ambientLight.color = UIColor(white: 0.98, alpha: 1.0)
         let ambientNode = SCNNode()
         ambientNode.light = ambientLight
         scene.rootNode.addChildNode(ambientNode)
 
-        // Directional light - main light from front-above
-        let directionalLight = SCNLight()
-        directionalLight.type = .directional
-        directionalLight.intensity = directionalIntensity
-        directionalLight.color = UIColor.white
-        directionalLight.castsShadow = false
+        // Key light - front-left-above
+        let keyLight = SCNLight()
+        keyLight.type = .omni
+        keyLight.intensity = 550
+        keyLight.color = UIColor.white
+        let keyNode = SCNNode()
+        keyNode.light = keyLight
+        keyNode.position = SCNVector3(-6, 5, 8)
+        scene.rootNode.addChildNode(keyNode)
 
-        let directionalNode = SCNNode()
-        directionalNode.light = directionalLight
-        directionalNode.position = directionalPosition
-        directionalNode.eulerAngles.x = directionalAngle
-        scene.rootNode.addChildNode(directionalNode)
+        // Fill light - front-right-center
+        let fillLight = SCNLight()
+        fillLight.type = .omni
+        fillLight.intensity = 400
+        fillLight.color = UIColor(white: 0.95, alpha: 1.0)
+        let fillNode = SCNNode()
+        fillNode.light = fillLight
+        fillNode.position = SCNVector3(5, 0, 7)
+        scene.rootNode.addChildNode(fillNode)
+
+        // Back light - behind card for rim/edge separation
+        let backLight = SCNLight()
+        backLight.type = .omni
+        backLight.intensity = 500
+        backLight.color = UIColor(white: 0.9, alpha: 1.0)
+        let backNode = SCNNode()
+        backNode.light = backLight
+        backNode.position = SCNVector3(0, 3, -5)
+        scene.rootNode.addChildNode(backNode)
     }
 
     /// Configures the camera for the 3D card scene.
