@@ -20,6 +20,29 @@ enum Card3DMaterials {
     private static let metalness: CGFloat = 0.1
     private static let shininess: CGFloat = 0.15
 
+    // MARK: - Shimmer Shader
+
+    private static let shimmerShader = """
+    #pragma arguments
+    float shimmerProgress;
+
+    #pragma transparent
+    #pragma body
+
+    if (shimmerProgress >= 0.0) {
+        float normalizedY = 1.0 - ((_surface.position.y + 4.0) / 8.0);
+        float bandWidth = 0.15;
+        float distFromBand = abs(normalizedY - shimmerProgress);
+        float band = 1.0 - smoothstep(0.0, bandWidth, distFromBand);
+        _surface.diffuse.rgb += float3(band * 0.4);
+    }
+    """
+
+    static func applyShimmerShader(to material: SCNMaterial) {
+        material.shaderModifiers = [.surface: shimmerShader]
+        material.setValue(Float(-1.0), forKey: "shimmerProgress")
+    }
+
     // MARK: - Public API
 
     /// Builds a complete material set for the given card style

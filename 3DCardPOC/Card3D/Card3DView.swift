@@ -8,6 +8,37 @@
 import SceneKit
 import SwiftUI
 
+// MARK: - Shimmer Animator
+
+final class ShimmerAnimator {
+    private var displayLink: CADisplayLink?
+    private var startTime: CFTimeInterval = 0
+    private let duration: CFTimeInterval = 0.2
+    private weak var material: SCNMaterial?
+
+    func start(material: SCNMaterial) {
+        stop()
+        self.material = material
+        material.setValue(Float(0.0), forKey: "shimmerProgress")
+        displayLink = CADisplayLink(target: self, selector: #selector(update))
+        displayLink?.add(to: .main, forMode: .common)
+        startTime = CACurrentMediaTime()
+    }
+
+    func stop() {
+        displayLink?.invalidate()
+        displayLink = nil
+        material?.setValue(Float(-1.0), forKey: "shimmerProgress")
+    }
+
+    @objc private func update(_ link: CADisplayLink) {
+        let elapsed = CACurrentMediaTime() - startTime
+        let progress = min(Float(elapsed / duration), 1.0)
+        material?.setValue(progress, forKey: "shimmerProgress")
+        if progress >= 1.0 { stop() }
+    }
+}
+
 // MARK: - Interaction Mode
 
 enum Card3DInteractionMode {
@@ -45,6 +76,7 @@ struct Card3DView: UIViewRepresentable {
     @Binding var rotation: Double
     var xRotation: Double = 0
     var animationDuration: Double = 0.15
+    var shimmerTrigger: Int = 0
 
     // MARK: - UIViewRepresentable
 
@@ -58,7 +90,7 @@ struct Card3DView: UIViewRepresentable {
         sceneView.allowsCameraControl = false
 
         // Build scene using Card3DScene
-        let (scene, cardNode) = Card3DScene.build(
+        let (scene, cardNode, frontMaterial) = Card3DScene.build(
             data: data,
             style: style,
             textVisibility: textVisibility
@@ -75,6 +107,8 @@ struct Card3DView: UIViewRepresentable {
         // Store references in coordinator
         context.coordinator.cardNode = cardNode
         context.coordinator.sceneView = sceneView
+        context.coordinator.frontMaterial = frontMaterial
+        context.coordinator.previousShimmerTrigger = shimmerTrigger
 
         // Attach interaction handler
         attachInteractionHandler(to: sceneView, cardNode: cardNode, coordinator: context.coordinator)
@@ -96,9 +130,13 @@ struct Card3DView: UIViewRepresentable {
         // Check if interaction mode changed
         let interactionModeChanged = coordinator.previousInteractionModeType != interactionMode.modeType
 
+        // Check if shimmer should trigger
+        let shimmerTriggered = shimmerTrigger != coordinator.previousShimmerTrigger && shimmerTrigger > 0
+
         if needsRebuild {
             rebuildScene(in: uiView, coordinator: coordinator)
             coordinator.previousInteractionModeType = interactionMode.modeType
+            coordinator.previousShimmerTrigger = shimmerTrigger
         } else if interactionModeChanged {
             // Just update interaction handler without rebuilding scene
             coordinator.interactionHandler?.detach()
@@ -128,15 +166,24 @@ struct Card3DView: UIViewRepresentable {
                 cardNode.scale = SCNVector3(scale, scale, scale)
                 SCNTransaction.commit()
             }
+
+            // Trigger shimmer if needed
+            if shimmerTriggered {
+                coordinator.previousShimmerTrigger = shimmerTrigger
+                if let material = coordinator.frontMaterial {
+                    coordinator.shimmerAnimator.start(material: material)
+                }
+            }
         }
     }
 
     private func rebuildScene(in sceneView: SCNView, coordinator: Coordinator) {
         // Detach old interaction handler
         coordinator.interactionHandler?.detach()
+        coordinator.shimmerAnimator.stop()
 
         // Build new scene
-        let (scene, cardNode) = Card3DScene.build(
+        let (scene, cardNode, frontMaterial) = Card3DScene.build(
             data: data,
             style: style,
             textVisibility: textVisibility
@@ -153,6 +200,7 @@ struct Card3DView: UIViewRepresentable {
 
         // Update coordinator references
         coordinator.cardNode = cardNode
+        coordinator.frontMaterial = frontMaterial
         coordinator.previousData = data
         coordinator.previousStyle = style
         coordinator.previousTextVisibility = textVisibility
@@ -195,6 +243,7 @@ struct Card3DView: UIViewRepresentable {
         var parent: Card3DView
         weak var cardNode: SCNNode?
         weak var sceneView: SCNView?
+        weak var frontMaterial: SCNMaterial?
         var interactionHandler: Card3DInteractionHandler?
 
         // Track previous values to detect changes
@@ -202,6 +251,10 @@ struct Card3DView: UIViewRepresentable {
         var previousStyle: Card3DStyle
         var previousTextVisibility: Card3DTextVisibility
         var previousInteractionModeType: Int
+        var previousShimmerTrigger: Int = 0
+
+        // Shimmer animator
+        let shimmerAnimator = ShimmerAnimator()
 
         // Flip state
         var isShowingBack = false

@@ -324,8 +324,11 @@ private struct HomeCarouselCardView: View {
                 .xRotation(xTilt)
                 .rotation(.constant(yTilt))
                 .animationDuration(animDuration)
-            .opacity(viewModel.shouldHideSourceCard && viewModel.expandedCardIndex == index ? 0 : 1)
+                .shimmerTrigger(card.id == viewModel.shimmerTargetCardId ? viewModel.shimmerTriggerCount : 0)
+                .opacity(viewModel.shouldHideSourceCard && viewModel.expandedCardIndex == index ? 0 : (isSleeping ? 0.5 : 1.0))
+                .animation(.easeInOut(duration: 1.0), value: isSleeping)
             .onTapGesture {
+                guard !isSleeping else { return }
                 viewModel.expandCard(
                     index: index,
                     frame: geometry.frame(in: .global),
@@ -377,6 +380,10 @@ final class HomeViewModel: ObservableObject {
     @Published var sleepingCardIds: Set<UUID> = []
     @Published var sleepAnimatingCardIds: Set<UUID> = []
 
+    // Shimmer state
+    @Published var shimmerTriggerCount: Int = 0
+    @Published var shimmerTargetCardId: UUID? = nil
+
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private let mediumHaptic = UIImpactFeedbackGenerator(style: .medium)
 
@@ -421,6 +428,10 @@ final class HomeViewModel: ObservableObject {
         mediumHaptic.impactOccurred()
 
         sleepAnimatingCardIds.insert(cardId)
+
+        // Trigger shimmer
+        shimmerTargetCardId = cardId
+        shimmerTriggerCount += 1
 
         if sleepingCardIds.contains(cardId) {
             sleepingCardIds.remove(cardId)

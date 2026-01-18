@@ -80,6 +80,15 @@ extension Card3DView {
         copy.animationDuration = duration
         return copy
     }
+
+    /// Sets the shimmer trigger value. Increment to play shimmer animation.
+    /// - Parameter trigger: The trigger counter (increment to play shimmer).
+    /// - Returns: A new Card3DView with the updated shimmer trigger.
+    func shimmerTrigger(_ trigger: Int) -> Card3DView {
+        var copy = self
+        copy.shimmerTrigger = trigger
+        return copy
+    }
 }
 
 // MARK: - Convenience Initializer

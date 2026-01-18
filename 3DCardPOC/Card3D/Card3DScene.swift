@@ -33,12 +33,12 @@ enum Card3DScene {
     ///   - data: Card data (number, name, expiry, cvv)
     ///   - style: Visual style configuration
     ///   - textVisibility: Which text elements to show
-    /// - Returns: Tuple containing the scene and a reference to the card node for interaction
+    /// - Returns: Tuple containing the scene, card node, and front material for shimmer effects
     static func build(
         data: Card3DData,
         style: Card3DStyle,
         textVisibility: Card3DTextVisibility
-    ) -> (scene: SCNScene, cardNode: SCNNode) {
+    ) -> (scene: SCNScene, cardNode: SCNNode, frontMaterial: SCNMaterial) {
         let scene = SCNScene()
 
         // Setup lighting
@@ -51,6 +51,9 @@ enum Card3DScene {
         // Apply materials based on style
         let materialSet = Card3DMaterials.build(style: style)
         cardGeometry.materials = [materialSet.front, materialSet.back, materialSet.edge, materialSet.edge, materialSet.edge]
+
+        // Apply shimmer shader to front material
+        Card3DMaterials.applyShimmerShader(to: materialSet.front)
 
         // Create the card node
         let cardShapeNode = SCNNode(geometry: cardGeometry)
@@ -71,7 +74,7 @@ enum Card3DScene {
 
         scene.rootNode.addChildNode(containerNode)
 
-        return (scene: scene, cardNode: containerNode)
+        return (scene: scene, cardNode: containerNode, frontMaterial: materialSet.front)
     }
 
     // MARK: - Text Node Creation
